@@ -11,12 +11,14 @@ struct cpu cpus[NCPU];
 
 struct proc proc[NPROC];
 
+//pointers of all the threads used to assign kstack
 struct sthread thread[NTHREAD];
 
 struct proc *initproc;
 
+
 int nextpid = 1;
-int nexttid = 1;
+int nexttid = 0;
 struct spinlock pid_lock;
 
 extern void forkret(void);
@@ -144,12 +146,13 @@ found:
   // }
 
   // An empty user page table.
-  p->pagetable = proc_pagetable(p);
-  if(p->pagetable == 0){
-    freeproc(p);
-    release(&p->lock);
-    return 0;
-  }
+  //moved
+  // p->pagetable = proc_pagetable(p);
+  // if(p->pagetable == 0){
+  //   freeproc(p);
+  //   release(&p->lock);
+  //   return 0;
+  // }
 
   //Create starting thread.
   //how are we gonna get argc and argc
@@ -157,11 +160,12 @@ found:
   p->threads[0] = init_thread(p->main_func,argc,argv)
   p->num_threads = 1;
 
-  // Set up new context to start executing at forkret,
-  // which returns to user space.
-  memset(&p->context, 0, sizeof(p->context));
-  p->context.ra = (uint64)forkret;
-  p->context.sp = p->kstack + PGSIZE;
+//moved to thread
+  // // Set up new context to start executing at forkret,
+  // // which returns to user space.
+  // memset(&p->context, 0, sizeof(p->context));
+  // p->context.ra = (uint64)forkret;
+  // p->context.sp = p->kstack + PGSIZE;
 
   return p;
 }
@@ -177,7 +181,7 @@ freeproc(struct proc *p)
   p->trapframe = 0;
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
-  p->pagetable = 0;
+ // p->pagetable = 0;
   p->sz = 0;
   p->pid = 0;
   p->parent = 0;
@@ -222,6 +226,40 @@ proc_pagetable(struct proc *p)
   return pagetable;
 }
 
+// Create a user page table for a given process, with no user memory,
+// but with trampoline and trapframe pages.
+pagetable_t
+thread_pagetable(struct sthread *s)
+{
+  pagetable_t pagetable;
+
+  // An empty page table.
+  pagetable = uvmcreate();
+  if(pagetable == 0)
+    return 0;
+
+  // map the trampoline code (for system call return)
+  // at the highest user virtual address.
+  // only the supervisor uses it, on the way
+  // to/from user space, so not PTE_U.
+  if(mappages(pagetable, TRAMPOLINE, PGSIZE,
+              (uint64)trampoline, PTE_R | PTE_X) < 0){
+    uvmfree(pagetable, 0);
+    return 0;
+  }
+
+  // map the trapframe page just below the trampoline page, for
+  // trampoline.S.
+  if(mappages(pagetable, TRAPFRAME, PGSIZE,
+              (uint64)(s->trapframe), PTE_R | PTE_W) < 0){
+    uvmunmap(pagetable, TRAMPOLINE, 1, 0);
+    uvmfree(pagetable, 0);
+    return 0;
+  }
+
+  return pagetable;
+}
+
 // Free a process's page table, and free the
 // physical memory it refers to.
 void
@@ -246,6 +284,7 @@ uchar initcode[] = {
 };
 
 // Set up first user process.
+//Modified since many of these fields are now in thread
 void
 userinit(void)
 {
@@ -256,13 +295,16 @@ userinit(void)
   
   // allocate one user page and copy initcode's instructions
   // and data into it.
-  uvmfirst(p->pagetable, initcode, sizeof(initcode));
+  uvmfirst(p->threads[0]->pagetable, initcode, sizeof(initcode));
   p->sz = PGSIZE;
+  p->threads[0]->sz = PGSIZE;
+
 
   // prepare for the very first "return" from kernel to user.
-  p->trapframe->epc = 0;      // user program counter
-  p->trapframe->sp = PGSIZE;  // user stack pointer
+  p->threads[0]->trapframe->epc = 0;      // user program counter
+  p->threads[0]->trapframe->sp = PGSIZE;  // user stack pointer
 
+  //todo: possibly modify this
   safestrcpy(p->name, "initcode", sizeof(p->name));
   p->cwd = namei("/");
 
@@ -291,38 +333,47 @@ growproc(int n)
   return 0;
 }
 
-//creates starting thread for a process: pass main into here
+//to create a starting thread for a process: pass main into here
 struct sthread init_thread(void* func, void* func_args){
-  struct sthread nt;
+  struct sthread *nt = &threads[nexttid];
   nt-> func = func;
   nt-> func_args = func_args;
 
   nt-> tid = nexttid;
   nexttid++;
 
+  //init pagetable
+  nt->pagetable = thread_pagetable(nt);
+  if(nt->pagetable == 0){
+    printf("pagetable fucked :(");
+  }
+
   //init trapframe
   if (nt->trapframe = (struct trapframe *)kalloc() == 0){
-    printf("trapframe fucked");
+    printf("trapframe fucked :(");
   }
   
-  //init kstack 
-  for(int i = )
-  nt->kstack = KSTACK((int) (p - proc));
+  //init kstack uses kstack macro that determines distance from start of all threads to new one
+  nt->kstack = KSTACK((int) (&threads[0] - nt));
 
+  // Set up new context to start executing at forkret,
+  // which returns to user space.
+  memset(&nt->context, 0, sizeof(nt->context));
+  nt->context.ra = (uint64)forkret;
+  nt->context.sp = nt->kstack + PGSIZE;
+
+  return nt
 
 }
 
 //add a new thread to an existing process
-struct proc create_thread(proc* parent, void* func, void* func_args){
-  struct proc nt;
-  nt->func = func;
-  nt->arg = func_args;
-
+struct sthread create_thread(proc* parent, void* func, void* func_args){
+  struct sthread *nt = init_thread(func, func_args)
 
   parent->num_threads = parent->num_threads + 1;
-  parent->threads[num_threads] = nt;
+  parent->threads[num_threads] = nt*;
 
-
+  
 }
 
 // Create a new process, copying the parent.

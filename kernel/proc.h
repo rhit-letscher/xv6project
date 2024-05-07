@@ -90,6 +90,11 @@ struct sthread {
   struct trapframe *trapframe;
   uint64 kstack;
   int tid;                     //Thread id
+  struct context context; //context/instruction set
+  pagetable_t pagetable;       // User page table
+  uint64 sz;                   // Size of thread memory (bytes)
+
+
 }
 
 // Per-process state
@@ -116,10 +121,13 @@ struct proc {
   //uint64 kstack;               // Virtual address of kernel stack
   uint64 sz;                   // Size of process memory (bytes)
 
-  pagetable_t pagetable;       // User page table
+  //moved to thread
+  // pagetable_t pagetable;       // User page table
 
   // struct trapframe *trapframe; // moved to thread data page for trampoline.S
-  struct context context;      // swtch() here to run process
+  
+  //moved to thread
+  //struct context context;      // swtch() here to run process
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
