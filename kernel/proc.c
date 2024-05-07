@@ -5,14 +5,18 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#define NTHREAD = MAX_THREADS_PER_PROCESS*NPROC
 
 struct cpu cpus[NCPU];
 
 struct proc proc[NPROC];
 
+struct sthread thread[NTHREAD];
+
 struct proc *initproc;
 
 int nextpid = 1;
+int nexttid = 1;
 struct spinlock pid_lock;
 
 extern void forkret(void);
@@ -57,6 +61,8 @@ procinit(void)
       p->kstack = KSTACK((int) (p - proc));
   }
 }
+
+
 
 // Must be called with interrupts disabled,
 // to prevent race with process being moved
@@ -129,12 +135,13 @@ found:
   p->pid = allocpid();
   p->state = USED;
 
+  //we are moving this to threads
   // Allocate a trapframe page.
-  if((p->trapframe = (struct trapframe *)kalloc()) == 0){
-    freeproc(p);
-    release(&p->lock);
-    return 0;
-  }
+  // if((p->trapframe = (struct trapframe *)kalloc()) == 0){
+  //   freeproc(p);
+  //   release(&p->lock);
+  //   return 0;
+  // }
 
   // An empty user page table.
   p->pagetable = proc_pagetable(p);
@@ -143,6 +150,12 @@ found:
     release(&p->lock);
     return 0;
   }
+
+  //Create starting thread.
+  //how are we gonna get argc and argc
+  //todo finish
+  p->threads[0] = init_thread(p->main_func,argc,argv)
+  p->num_threads = 1;
 
   // Set up new context to start executing at forkret,
   // which returns to user space.
@@ -278,26 +291,33 @@ growproc(int n)
   return 0;
 }
 
+//creates starting thread for a process: pass main into here
+struct sthread init_thread(void* func, void* func_args){
+  struct sthread nt;
+  nt-> func = func;
+  nt-> func_args = func_args;
 
-create_thread(proc* parent, void* func, void* func_args){
-  struct proc *np;
-  
-  np-> parent = parent;
-  pagetable = 
-  
-  // Copy user memory from parent to child.
-  if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0){
-    freeproc(np);
-    release(&np->lock);
-    return -1;
+  //init trapframe
+  if (nt->trapframe = (struct trapframe *)kalloc() == 0){
+    printf("trapframe fucked")
   }
-  np->sz = p->sz;
-
-  np->tstack = tleader->tstack;
-
-  //Todo: create a NEW trapframe (user registers) with identical content
-  *(np->trapframe) = *(p->trapframe);
   
+  //init kstack at 
+  nt->kstack = KSTACK((int) (p - proc));
+
+
+}
+
+//add a new thread to an existing process
+struct proc create_thread(proc* parent, void* func, void* func_args){
+  struct proc nt;
+  nt->func = func;
+  nt->arg = func_args;
+
+
+  parent->num_threads = parent->num_threads + 1;
+  parent->threads[num_threads] = nt;
+
 
 }
 
