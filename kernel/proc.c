@@ -296,13 +296,13 @@ struct sthread init_thread(void* func, void* func_args){
   struct sthread nt;
   nt-> func = func;
   nt-> func_args = func_args;
-  
+
   nt-> tid = nexttid;
   nexttid++;
 
   //init trapframe
   if (nt->trapframe = (struct trapframe *)kalloc() == 0){
-    printf("trapframe fucked")
+    printf("trapframe fucked");
   }
   
   //init kstack 
