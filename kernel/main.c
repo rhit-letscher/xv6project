@@ -41,5 +41,6 @@ main()
     plicinithart();   // ask PLIC for device interrupts
   }
 
+  printf("about to start scheduler on cpu %d\n",cpuid());
   scheduler();        
 }

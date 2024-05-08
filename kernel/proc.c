@@ -179,9 +179,9 @@ uchar initcode[] = {
 };
 
 //allocates a new thread
-struct sthread thread_alloc(struct proc *parent){
-  struct sthread *nt;
-  nt = (struct sthread*) kalloc();
+//revert thread_alloc function to as close to the original version
+//of procalloc as possible
+struct sthread *thread_alloc(struct proc *parent, struct sthread *nt){
  // nt-> func = func;
  // nt-> func_args = func_args;
   nt->state = RUNNABLE;
@@ -205,11 +205,13 @@ struct sthread thread_alloc(struct proc *parent){
 
   // Set up new context to start executing at forkret,
   // which returns to user space.
+  printf("here 1\n");
   memset(&nt->context, 0, sizeof(nt->context));
   nt->context.ra = (uint64)forkret;
   nt->context.sp = nt->kstack + PGSIZE;
+  printf("here 2\n");
 
-  return *nt;
+  return nt;
 
 }
 
@@ -256,7 +258,7 @@ found:
   //Create starting thread.
   //how are we gonna get argc and argc
   //todo finish
-  p->threads[0] = thread_alloc(p);
+  thread_alloc(p, &p->threads[0]);
   p->num_threads = 1;
 
 //moved to thread
@@ -346,6 +348,7 @@ freeproc(struct proc *p)
 void
 userinit(void)
 {
+  printf("calling userinit\n");
   struct proc *p;
 
   p = allocproc();
@@ -367,7 +370,7 @@ userinit(void)
   p->cwd = namei("/");
 
   p->state = RUNNABLE;
-
+  printf("done with userinit\n");
   release(&p->lock);
 }
 
@@ -395,14 +398,15 @@ growproc(int n)
 
 
 //add a new thread to an existing process
-struct sthread create_thread(void* func, void* func_args){
+struct sthread *create_thread(void* func, void* func_args){
   struct proc* parent = myproc();
-  struct sthread nt = thread_alloc(parent);
+  struct sthread* nt = thread_alloc(parent, &parent->threads[parent->num_threads]);
+
 
   parent->num_threads = parent->num_threads + 1;
-  parent->threads[parent->num_threads] = nt;
-  nt.func = func;
-  nt.arg = func_args;
+  //parent->threads[parent->num_threads] = *nt;
+  nt->func = func;
+  nt->arg = func_args;
   return nt;
 }
 
@@ -585,9 +589,10 @@ scheduler(void)
   for(;;){
     // Avoid deadlock by ensuring that devices can interrupt.
     intr_on();
-
+    
     for(p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
+      //printf("calling scheduler\n");
       if(p->state == RUNNABLE) {
         // Switch to chosen process.  It is the process's job
         // to release its lock and then reacquire it
@@ -596,20 +601,28 @@ scheduler(void)
         p->state = RUNNING;
         c->proc = p;
         for(int i = 0; i<p->num_threads;i++){
-          struct sthread t = p->threads[i];
-          if((t.state) == RUNNABLE){
-          t.state = RUNNING;
-          c->thread = &t;
+          printf("scheduler checking threads\n");
+          struct sthread *t = &p->threads[i];
+          if((t->state) == RUNNABLE){
+          printf("found runnable thread %d state = %d\n",t->tid,t->state);
+          t->state = RUNNING;
+          c->thread = t;
           //p->current_thread = i;
-          swtch(&c->context, &t.context);
+          printf("switching context\n");
+          //after switch, running process will lock
+          swtch(&c->context, &t->context);
+          //after it stops running, it will lock
           c->thread = 0;
+          printf(" thread done\n");
           }
         }
 
         // Process is done running for now.
         // It should have changed its p->state before coming back.
+        printf("process done\n");
         c->proc = 0;
       }
+      //unlock the process that was locked during the yield
       release(&p->lock);
     }
   }
@@ -629,7 +642,8 @@ sched(void)
   int intena;
   struct proc *p = myproc();
   struct sthread *t = mythread();
-  
+  printf("calling sched \n");
+
   if(!holding(&p->lock))
     panic("sched p->lock");
   if(mycpu()->noff != 1)
@@ -642,12 +656,14 @@ sched(void)
   intena = mycpu()->intena;
   swtch(&t->context, &mycpu()->context);
   mycpu()->intena = intena;
+  printf("finished calling sched \n");
 }
 
 // Give up the CPU for one scheduling round.
 void
 yield(void)
 {
+  printf("calling yield \n");
   struct proc *p = myproc();
   acquire(&p->lock);
   p->state = RUNNABLE;
@@ -660,6 +676,7 @@ yield(void)
 void
 forkret(void)
 {
+  printf("here at forkret\n");
   static int first = 1;
 
   // Still holding p->lock from scheduler.

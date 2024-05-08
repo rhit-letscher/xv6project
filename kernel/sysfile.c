@@ -505,6 +505,8 @@ sys_pipe(void)
     fileclose(rf);
     fileclose(wf);
     return -1;
+    printf("syspipe fail\n");
   }
   return 0;
+  printf("syspipe complete\n");
 }
