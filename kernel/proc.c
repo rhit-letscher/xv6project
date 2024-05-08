@@ -16,7 +16,6 @@ struct sthread thread[NTHREAD];
 
 struct proc *initproc;
 
-
 int nextpid = 1;
 int nexttid = 0;
 struct spinlock pid_lock;
@@ -104,16 +103,10 @@ struct sthread* mythread()
 {
   push_off();
   struct cpu *c = mycpu();
-  struct proc *p = c->proc;
+  struct sthread *t = c->thread;
   pop_off();
-  if(p->current_thread == -1){
-    return 0;
-  }
-  return &p->threads[p->current_thread];
+  return t;
 }
-
-
-
 
 int
 allocpid()
@@ -588,6 +581,7 @@ scheduler(void)
   struct cpu *c = mycpu();
   
   c->proc = 0;
+  c->thread = 0;
   for(;;){
     // Avoid deadlock by ensuring that devices can interrupt.
     intr_on();
@@ -600,14 +594,15 @@ scheduler(void)
         // before jumping back to us.
         //Examine threads within process
         p->state = RUNNING;
-        //do we need to refactor this to a thread?
         c->proc = p;
         for(int i = 0; i<p->num_threads;i++){
           struct sthread t = p->threads[i];
           if((t.state) == RUNNABLE){
           t.state = RUNNING;
-          p->current_thread = i;
+          c->thread = &t;
+          //p->current_thread = i;
           swtch(&c->context, &t.context);
+          c->thread = 0;
           }
         }
 
@@ -627,6 +622,7 @@ scheduler(void)
 // be proc->intena and proc->noff, but that would
 // break in the few places where a lock is held but
 // there's no process.
+//on-demand reschedule, used when we wait() (yield)
 void
 sched(void)
 {
