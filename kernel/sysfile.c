@@ -16,6 +16,10 @@
 #include "file.h"
 #include "fcntl.h"
 
+extern struct sthread* mythread();
+extern int threadkilled(struct sthread *t);
+extern void threadsetkilled(struct sthread *t);
+
 // Fetch the nth word-sized system call argument as a file descriptor
 // and return both the descriptor and the corresponding struct file.
 static int
@@ -481,6 +485,7 @@ sys_pipe(void)
   struct file *rf, *wf;
   int fd0, fd1;
   struct proc *p = myproc();
+  struct sthread *t = mythread();
 
   argaddr(0, &fdarray);
   if(pipealloc(&rf, &wf) < 0)
@@ -493,8 +498,8 @@ sys_pipe(void)
     fileclose(wf);
     return -1;
   }
-  if(copyout(p->pagetable, fdarray, (char*)&fd0, sizeof(fd0)) < 0 ||
-     copyout(p->pagetable, fdarray+sizeof(fd0), (char *)&fd1, sizeof(fd1)) < 0){
+  if(copyout(t->pagetable, fdarray, (char*)&fd0, sizeof(fd0)) < 0 ||
+     copyout(t->pagetable, fdarray+sizeof(fd0), (char *)&fd1, sizeof(fd1)) < 0){
     p->ofile[fd0] = 0;
     p->ofile[fd1] = 0;
     fileclose(rf);

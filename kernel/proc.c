@@ -5,7 +5,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
-#define NTHREAD = MAX_THREADS_PER_PROCESS*NPROC
+#define NTHREAD MAX_THREADS_PER_PROCESS*NPROC
 
 struct cpu cpus[NCPU];
 
@@ -23,9 +23,10 @@ struct spinlock pid_lock;
 
 extern void forkret(void);
 static void freeproc(struct proc *p);
-
 extern char trampoline[]; // trampoline.S
-
+extern int threadkilled(struct sthread *t);
+extern void threadsetkilled(struct sthread *t);
+extern struct sthread* mythread();
 // helps ensure that wakeups of wait()ing
 // parents are not lost. helps obey the
 // memory model when using p->parent.
@@ -99,8 +100,7 @@ myproc(void)
 }
 
 // returns the currently running thread, or zero if none
-struct sthread*
-mythread(void)
+struct sthread* mythread()
 {
   push_off();
   struct cpu *c = mycpu();
@@ -126,6 +126,98 @@ allocpid()
   release(&pid_lock);
 
   return pid;
+}
+
+// Create a user page table for a given process, with no user memory,
+// but with trampoline and trapframe pages.
+pagetable_t
+thread_pagetable(struct sthread *s)
+{
+  pagetable_t pagetable;
+
+  // An empty page table.
+  pagetable = uvmcreate();
+  if(pagetable == 0)
+    return 0;
+
+  // map the trampoline code (for system call return)
+  // at the highest user virtual address.
+  // only the supervisor uses it, on the way
+  // to/from user space, so not PTE_U.
+  if(mappages(pagetable, TRAMPOLINE, PGSIZE,
+              (uint64)trampoline, PTE_R | PTE_X) < 0){
+    uvmfree(pagetable, 0);
+    return 0;
+  }
+
+  // map the trapframe page just below the trampoline page, for
+  // trampoline.S.
+  if(mappages(pagetable, TRAPFRAME, PGSIZE,
+              (uint64)(s->trapframe), PTE_R | PTE_W) < 0){
+    uvmunmap(pagetable, TRAMPOLINE, 1, 0);
+    uvmfree(pagetable, 0);
+    return 0;
+  }
+
+  return pagetable;
+}
+
+// Free a process's page table, and free the
+// physical memory it refers to.
+void
+proc_freepagetable(pagetable_t pagetable, uint64 sz)
+{
+  uvmunmap(pagetable, TRAMPOLINE, 1, 0);
+  uvmunmap(pagetable, TRAPFRAME, 1, 0);
+  uvmfree(pagetable, sz);
+}
+
+// a user program that calls exec("/init")
+// assembled from ../user/initcode.S
+// od -t xC ../user/initcode
+uchar initcode[] = {
+  0x17, 0x05, 0x00, 0x00, 0x13, 0x05, 0x45, 0x02,
+  0x97, 0x05, 0x00, 0x00, 0x93, 0x85, 0x35, 0x02,
+  0x93, 0x08, 0x70, 0x00, 0x73, 0x00, 0x00, 0x00,
+  0x93, 0x08, 0x20, 0x00, 0x73, 0x00, 0x00, 0x00,
+  0xef, 0xf0, 0x9f, 0xff, 0x2f, 0x69, 0x6e, 0x69,
+  0x74, 0x00, 0x00, 0x24, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00
+};
+
+//allocates a new thread
+struct sthread thread_alloc(struct proc *parent){
+  struct sthread *nt;
+  nt = (struct sthread*) kalloc();
+ // nt-> func = func;
+ // nt-> func_args = func_args;
+  nt->state = RUNNABLE;
+
+  nt-> tid = nexttid;
+  nexttid++;
+
+  //init pagetable
+  nt->pagetable = thread_pagetable(nt);
+  if(nt->pagetable == 0){
+    printf("pagetable fucked :(");
+  }
+
+  //init trapframe
+  if ((nt->trapframe = (struct trapframe *)kalloc() ) == 0){
+    printf("trapframe fucked :(");
+  }
+  
+  //init kstack uses kstack macro that determines distance from start of all threads to new one
+  nt->kstack = KSTACK((int) (&parent->threads[0] - nt));
+
+  // Set up new context to start executing at forkret,
+  // which returns to user space.
+  memset(&nt->context, 0, sizeof(nt->context));
+  nt->context.ra = (uint64)forkret;
+  nt->context.sp = nt->kstack + PGSIZE;
+
+  return *nt;
+
 }
 
 // Look in the process table for an UNUSED proc.
@@ -200,7 +292,7 @@ freeproc(struct proc *p)
 {
   //frees all threads
   for(int i = 0;i<p->num_threads;i++){
-    freethread(&p->threads[i])
+    freethread(&p->threads[i]);
   }
   // if(p->trapframe)
   //   kfree((void*)p->trapframe);
@@ -222,94 +314,39 @@ freeproc(struct proc *p)
 
 // Create a user page table for a given process, with no user memory,
 // but with trampoline and trapframe pages.
-pagetable_t
-proc_pagetable(struct proc *p)
-{
-  pagetable_t pagetable;
+// pagetable_t
+// proc_pagetable(struct proc *p)
+// {
+//   pagetable_t pagetable;
 
-  // An empty page table.
-  pagetable = uvmcreate();
-  if(pagetable == 0)
-    return 0;
+//   // An empty page table.
+//   pagetable = uvmcreate();
+//   if(pagetable == 0)
+//     return 0;
 
-  // map the trampoline code (for system call return)
-  // at the highest user virtual address.
-  // only the supervisor uses it, on the way
-  // to/from user space, so not PTE_U.
-  if(mappages(pagetable, TRAMPOLINE, PGSIZE,
-              (uint64)trampoline, PTE_R | PTE_X) < 0){
-    uvmfree(pagetable, 0);
-    return 0;
-  }
+//   // map the trampoline code (for system call return)
+//   // at the highest user virtual address.
+//   // only the supervisor uses it, on the way
+//   // to/from user space, so not PTE_U.
+//   if(mappages(pagetable, TRAMPOLINE, PGSIZE,
+//               (uint64)trampoline, PTE_R | PTE_X) < 0){
+//     uvmfree(pagetable, 0);
+//     return 0;
+//   }
 
-  // map the trapframe page just below the trampoline page, for
-  // trampoline.S.
-  if(mappages(pagetable, TRAPFRAME, PGSIZE,
-              (uint64)(p->trapframe), PTE_R | PTE_W) < 0){
-    uvmunmap(pagetable, TRAMPOLINE, 1, 0);
-    uvmfree(pagetable, 0);
-    return 0;
-  }
+//   // map the trapframe page just below the trampoline page, for
+//   // trampoline.S.
+//   if(mappages(pagetable, TRAPFRAME, PGSIZE,
+//               (uint64)(p->trapframe), PTE_R | PTE_W) < 0){
+//     uvmunmap(pagetable, TRAMPOLINE, 1, 0);
+//     uvmfree(pagetable, 0);
+//     return 0;
+//   }
 
-  return pagetable;
-}
+//   return pagetable;
+// }
 
-// Create a user page table for a given process, with no user memory,
-// but with trampoline and trapframe pages.
-pagetable_t
-thread_pagetable(struct sthread *s)
-{
-  pagetable_t pagetable;
 
-  // An empty page table.
-  pagetable = uvmcreate();
-  if(pagetable == 0)
-    return 0;
-
-  // map the trampoline code (for system call return)
-  // at the highest user virtual address.
-  // only the supervisor uses it, on the way
-  // to/from user space, so not PTE_U.
-  if(mappages(pagetable, TRAMPOLINE, PGSIZE,
-              (uint64)trampoline, PTE_R | PTE_X) < 0){
-    uvmfree(pagetable, 0);
-    return 0;
-  }
-
-  // map the trapframe page just below the trampoline page, for
-  // trampoline.S.
-  if(mappages(pagetable, TRAPFRAME, PGSIZE,
-              (uint64)(s->trapframe), PTE_R | PTE_W) < 0){
-    uvmunmap(pagetable, TRAMPOLINE, 1, 0);
-    uvmfree(pagetable, 0);
-    return 0;
-  }
-
-  return pagetable;
-}
-
-// Free a process's page table, and free the
-// physical memory it refers to.
-void
-proc_freepagetable(pagetable_t pagetable, uint64 sz)
-{
-  uvmunmap(pagetable, TRAMPOLINE, 1, 0);
-  uvmunmap(pagetable, TRAPFRAME, 1, 0);
-  uvmfree(pagetable, sz);
-}
-
-// a user program that calls exec("/init")
-// assembled from ../user/initcode.S
-// od -t xC ../user/initcode
-uchar initcode[] = {
-  0x17, 0x05, 0x00, 0x00, 0x13, 0x05, 0x45, 0x02,
-  0x97, 0x05, 0x00, 0x00, 0x93, 0x85, 0x35, 0x02,
-  0x93, 0x08, 0x70, 0x00, 0x73, 0x00, 0x00, 0x00,
-  0x93, 0x08, 0x20, 0x00, 0x73, 0x00, 0x00, 0x00,
-  0xef, 0xf0, 0x9f, 0xff, 0x2f, 0x69, 0x6e, 0x69,
-  0x74, 0x00, 0x00, 0x24, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00
-};
 
 // Set up first user process.
 //Modified since many of these fields are now in thread
@@ -364,40 +401,6 @@ growproc(int n)
 }
 
 
-//allocates a new thread
-struct sthread thread_alloc(struct proc *parent){
-  struct sthread *nt;
- // nt-> func = func;
- // nt-> func_args = func_args;
-  nt->state = RUNNABLE;
-
-  nt-> tid = nexttid;
-  nexttid++;
-
-  //init pagetable
-  nt->pagetable = thread_pagetable(nt);
-  if(nt->pagetable == 0){
-    printf("pagetable fucked :(");
-  }
-
-  //init trapframe
-  if ((nt->trapframe = (struct trapframe *)kalloc() ) == 0){
-    printf("trapframe fucked :(");
-  }
-  
-  //init kstack uses kstack macro that determines distance from start of all threads to new one
-  nt->kstack = KSTACK((int) (&parent->threads[0] - nt));
-
-  // Set up new context to start executing at forkret,
-  // which returns to user space.
-  memset(&nt->context, 0, sizeof(nt->context));
-  nt->context.ra = (uint64)forkret;
-  nt->context.sp = nt->kstack + PGSIZE;
-
-  return nt*;
-
-}
-
 //add a new thread to an existing process
 struct sthread create_thread(void* func, void* func_args){
   struct proc* parent = myproc();
@@ -407,7 +410,7 @@ struct sthread create_thread(void* func, void* func_args){
   parent->threads[parent->num_threads] = nt;
   nt.func = func;
   nt.arg = func_args;
-  
+  return nt;
 }
 
 // Create a new process, copying the parent, with a single initial thread (handled in allocproc).
@@ -748,6 +751,26 @@ kill(int pid)
     release(&p->lock);
   }
   return -1;
+}
+
+void
+threadsetkilled(struct sthread *t)
+{
+  acquire(&t->lock);
+  t->killed = 1;
+  release(&t->lock);
+}
+
+
+int
+threadkilled(struct sthread *t)
+{
+  int k;
+  
+  acquire(&t->lock);
+  k = t->killed;
+  release(&t->lock);
+  return k;
 }
 
 void

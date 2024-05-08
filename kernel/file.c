@@ -13,6 +13,9 @@
 #include "stat.h"
 #include "proc.h"
 
+extern struct sthread* mythread();
+
+
 struct devsw devsw[NDEV];
 struct {
   struct spinlock lock;
@@ -87,14 +90,14 @@ fileclose(struct file *f)
 int
 filestat(struct file *f, uint64 addr)
 {
-  struct proc *p = myproc();
+  struct sthread *t = mythread();
   struct stat st;
   
   if(f->type == FD_INODE || f->type == FD_DEVICE){
     ilock(f->ip);
     stati(f->ip, &st);
     iunlock(f->ip);
-    if(copyout(p->pagetable, addr, (char *)&st, sizeof(st)) < 0)
+    if(copyout(t->pagetable, addr, (char *)&st, sizeof(st)) < 0)
       return -1;
     return 0;
   }

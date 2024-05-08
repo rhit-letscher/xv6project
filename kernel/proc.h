@@ -95,6 +95,7 @@ struct sthread {
   pagetable_t pagetable;       // User page table
   uint64 sz;                   // Size of thread memory (bytes)
   enum procstate state; //Thread state
+  int killed; //If non-zero, have been killed
 
 };
 

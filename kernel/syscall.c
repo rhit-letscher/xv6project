@@ -6,12 +6,14 @@
 #include "proc.h"
 #include "syscall.h"
 #include "defs.h"
+extern struct sthread* mythread();
+
 
 // Fetch the uint64 at addr from the current process.
 int
 fetchaddr(uint64 addr, uint64 *ip)
 {
-  struct proc *p = myproc();
+  struct sthread *p = mythread();
   if(addr >= p->sz || addr+sizeof(uint64) > p->sz) // both tests needed, in case of overflow
     return -1;
   if(copyin(p->pagetable, (char *)ip, addr, sizeof(*ip)) != 0)
@@ -24,7 +26,7 @@ fetchaddr(uint64 addr, uint64 *ip)
 int
 fetchstr(uint64 addr, char *buf, int max)
 {
-  struct proc *p = myproc();
+  struct sthread *p = mythread();
   if(copyinstr(p->pagetable, buf, addr, max) < 0)
     return -1;
   return strlen(buf);
@@ -33,7 +35,7 @@ fetchstr(uint64 addr, char *buf, int max)
 static uint64
 argraw(int n)
 {
-  struct proc *p = myproc();
+  struct sthread *p = mythread();
   switch (n) {
   case 0:
     return p->trapframe->a0;
@@ -132,7 +134,7 @@ void
 syscall(void)
 {
   int num;
-  struct proc *p = myproc();
+  struct sthread *p = mythread();
 
   num = p->trapframe->a7;
   if(num > 0 && num < NELEM(syscalls) && syscalls[num]) {
@@ -140,8 +142,8 @@ syscall(void)
     // and store its return value in p->trapframe->a0
     p->trapframe->a0 = syscalls[num]();
   } else {
-    printf("%d %s: unknown sys call %d\n",
-            p->pid, p->name, num);
+    printf("%d: unknown sys call %d\n",
+            p->tid, num);
     p->trapframe->a0 = -1;
   }
 }

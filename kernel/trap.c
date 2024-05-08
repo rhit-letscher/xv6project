@@ -10,6 +10,9 @@ struct spinlock tickslock;
 uint ticks;
 
 extern char trampoline[], uservec[], userret[];
+extern int threadkilled(struct sthread *t);
+extern void threadsetkilled(struct sthread *t);
+extern struct sthread* mythread();
 
 // in kernelvec.S, calls kerneltrap().
 void kernelvec();
@@ -45,20 +48,20 @@ usertrap(void)
   // since we're now in the kernel.
   w_stvec((uint64)kernelvec);
 
-  struct proc *p = myproc();
+  struct sthread *t = mythread();
   
   // save user program counter.
-  p->trapframe->epc = r_sepc();
+  t->trapframe->epc = r_sepc();
   
   if(r_scause() == 8){
     // system call
 
-    if(killed(p))
+    if(threadkilled(t))
       exit(-1);
 
     // sepc points to the ecall instruction,
     // but we want to return to the next instruction.
-    p->trapframe->epc += 4;
+    t->trapframe->epc += 4;
 
     // an interrupt will change sepc, scause, and sstatus,
     // so enable only now that we're done with those registers.
@@ -68,12 +71,12 @@ usertrap(void)
   } else if((which_dev = devintr()) != 0){
     // ok
   } else {
-    printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
+    printf("usertrap(): unexpected scause %p tid=%d\n", r_scause(), t->tid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
-    setkilled(p);
+    threadsetkilled(t);
   }
 
-  if(killed(p))
+  if(threadkilled(t))
     exit(-1);
 
   // give up the CPU if this is a timer interrupt.
@@ -89,7 +92,7 @@ usertrap(void)
 void
 usertrapret(void)
 {
-  struct proc *p = myproc();
+  struct sthread *p = mythread();
 
   // we're about to switch the destination of traps from
   // kerneltrap() to usertrap(), so turn off interrupts until

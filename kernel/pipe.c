@@ -8,6 +8,10 @@
 #include "sleeplock.h"
 #include "file.h"
 
+extern struct sthread* mythread();
+extern int threadkilled(struct sthread *t);
+extern void threadsetkilled(struct sthread *t);
+
 #define PIPESIZE 512
 
 struct pipe {
@@ -77,11 +81,11 @@ int
 pipewrite(struct pipe *pi, uint64 addr, int n)
 {
   int i = 0;
-  struct proc *pr = myproc();
+  struct sthread *pr = mythread();
 
   acquire(&pi->lock);
   while(i < n){
-    if(pi->readopen == 0 || killed(pr)){
+    if(pi->readopen == 0 || threadkilled(pr)){
       release(&pi->lock);
       return -1;
     }
@@ -106,12 +110,12 @@ int
 piperead(struct pipe *pi, uint64 addr, int n)
 {
   int i;
-  struct proc *pr = myproc();
+  struct sthread *pr = mythread();
   char ch;
 
   acquire(&pi->lock);
   while(pi->nread == pi->nwrite && pi->writeopen){  //DOC: pipe-empty
-    if(killed(pr)){
+    if(threadkilled(pr)){
       release(&pi->lock);
       return -1;
     }
