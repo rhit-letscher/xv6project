@@ -1,5 +1,4 @@
-#define MAX_THREADS_PER_PROCESS = 1000
-
+#define MAX_THREADS_PER_PROCESS 1000
 
 // Saved registers for kernel context switches.
 struct context {
@@ -24,6 +23,7 @@ struct context {
 // Per-CPU state.
 struct cpu {
   struct proc *proc;          // The process running on this cpu, or null.
+  struct sthread *thread;        // The thread running on this cpu, or null.
   struct context context;     // swtch() here to enter scheduler().
   int noff;                   // Depth of push_off() nesting.
   int intena;                 // Were interrupts enabled before push_off()?
@@ -85,7 +85,8 @@ struct trapframe {
 enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
 struct sthread {
-  void* (* func)func;
+  struct spinlock lock;
+  void* func; //function pointer
   void* arg;
   struct trapframe *trapframe;
   uint64 kstack;
@@ -93,15 +94,16 @@ struct sthread {
   struct context context; //context/instruction set
   pagetable_t pagetable;       // User page table
   uint64 sz;                   // Size of thread memory (bytes)
+  enum procstate state; //Thread state
 
-
-}
+};
 
 // Per-process state
 struct proc {
   struct spinlock lock;
   //list of threads for process (max 100)
   int num_threads;
+  int current_thread; //currently executing thread's index in threads list, or -1 if none
   struct sthread threads[MAX_THREADS_PER_PROCESS];
 
   // p->lock must be held when using these:
@@ -112,7 +114,7 @@ struct proc {
   int pid;                     // Process ID
 
   //pointer to main function so we can init
-  void* (* func) mainfunc;
+  //void* (* func) mainfunc;
 
   // wait_lock must be held when using this:
   struct proc *parent;         // Parent process

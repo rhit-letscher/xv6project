@@ -49,50 +49,50 @@ kvmmake(void)
   return kpgtbl;
 }
 
-//TODO: FINISH THIS MAYBE
-struct trapframe trapframe_copy(struct trapframe* parent){
-  struct trapframe nt;
-  kpgtbl = (struct trapframe) kalloc();
+// //TODO: FINISH THIS MAYBE
+// struct trapframe trapframe_copy(struct trapframe* parent){
+//   struct trapframe nt;
+//   kpgtbl = (struct trapframe) kalloc();
 
-  kpgtbl->kernel_satp = parent->kernel_satp;
-  kpgtbl->kernel_sp = parent->kernel_sp;
-  kpgtbl->kernel_trap = parent->kernel_trap;
-  /*   8 */ uint64 kernel_sp;     // top of process's kernel stack
-  /*  16 */ uint64 kernel_trap;   // usertrap()
-  /*  24 */ uint64 epc;           // saved user program counter
-  /*  32 */ uint64 kernel_hartid; // saved kernel tp
-  /*  40 */ uint64 ra;
-  /*  48 */ uint64 sp;
-  /*  56 */ uint64 gp;
-  /*  64 */ uint64 tp;
-  /*  72 */ uint64 t0;
-  /*  80 */ uint64 t1;
-  /*  88 */ uint64 t2;
-  /*  96 */ uint64 s0;
-  /* 104 */ uint64 s1;
-  /* 112 */ uint64 a0;
-  /* 120 */ uint64 a1;
-  /* 128 */ uint64 a2;
-  /* 136 */ uint64 a3;
-  /* 144 */ uint64 a4;
-  /* 152 */ uint64 a5;
-  /* 160 */ uint64 a6;
-  /* 168 */ uint64 a7;
-  /* 176 */ uint64 s2;
-  /* 184 */ uint64 s3;
-  /* 192 */ uint64 s4;
-  /* 200 */ uint64 s5;
-  /* 208 */ uint64 s6;
-  /* 216 */ uint64 s7;
-  /* 224 */ uint64 s8;
-  /* 232 */ uint64 s9;
-  /* 240 */ uint64 s10;
-  /* 248 */ uint64 s11;
-  /* 256 */ uint64 t3;
-  /* 264 */ uint64 t4;
-  /* 272 */ uint64 t5;
-  /* 280 */ uint64 t6;
-}
+//   kpgtbl->kernel_satp = parent->kernel_satp;
+//   kpgtbl->kernel_sp = parent->kernel_sp;
+//   kpgtbl->kernel_trap = parent->kernel_trap;
+//   /*   8 */ uint64 kernel_sp;     // top of process's kernel stack
+//   /*  16 */ uint64 kernel_trap;   // usertrap()
+//   /*  24 */ uint64 epc;           // saved user program counter
+//   /*  32 */ uint64 kernel_hartid; // saved kernel tp
+//   /*  40 */ uint64 ra;
+//   /*  48 */ uint64 sp;
+//   /*  56 */ uint64 gp;
+//   /*  64 */ uint64 tp;
+//   /*  72 */ uint64 t0;
+//   /*  80 */ uint64 t1;
+//   /*  88 */ uint64 t2;
+//   /*  96 */ uint64 s0;
+//   /* 104 */ uint64 s1;
+//   /* 112 */ uint64 a0;
+//   /* 120 */ uint64 a1;
+//   /* 128 */ uint64 a2;
+//   /* 136 */ uint64 a3;
+//   /* 144 */ uint64 a4;
+//   /* 152 */ uint64 a5;
+//   /* 160 */ uint64 a6;
+//   /* 168 */ uint64 a7;
+//   /* 176 */ uint64 s2;
+//   /* 184 */ uint64 s3;
+//   /* 192 */ uint64 s4;
+//   /* 200 */ uint64 s5;
+//   /* 208 */ uint64 s6;
+//   /* 216 */ uint64 s7;
+//   /* 224 */ uint64 s8;
+//   /* 232 */ uint64 s9;
+//   /* 240 */ uint64 s10;
+//   /* 248 */ uint64 s11;
+//   /* 256 */ uint64 t3;
+//   /* 264 */ uint64 t4;
+//   /* 272 */ uint64 t5;
+//   /* 280 */ uint64 t6;
+// }
 
 // Initialize the one kernel_pagetable
 void

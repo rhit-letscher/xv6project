@@ -60,7 +60,8 @@ procinit(void)
   for(p = proc; p < &proc[NPROC]; p++) {
       initlock(&p->lock, "proc");
       p->state = UNUSED;
-      p->kstack = KSTACK((int) (p - proc));
+      //this is handled in allocthread now
+      //p->threads[0]->kstack = KSTACK((int) (p - proc));
   }
 }
 
@@ -97,8 +98,21 @@ myproc(void)
   return p;
 }
 
+// returns the currently running thread, or zero if none
+struct sthread*
+mythread(void)
+{
+  push_off();
+  struct cpu *c = mycpu();
+  struct proc *p = c->proc;
+  pop_off();
+  if(p->current_thread == -1){
+    return 0;
+  }
+  return &p->threads[p->current_thread];
+}
 
-//creates a new thread
+
 
 
 int
@@ -157,7 +171,7 @@ found:
   //Create starting thread.
   //how are we gonna get argc and argc
   //todo finish
-  p->threads[0] = init_thread(p->main_func,argc,argv)
+  p->threads[0] = thread_alloc(p);
   p->num_threads = 1;
 
 //moved to thread
@@ -170,17 +184,29 @@ found:
   return p;
 }
 
+static void freethread(struct sthread *t){
+  if(t->trapframe)
+    kfree((void*)t->trapframe);
+  t->trapframe = 0;
+  if(t->pagetable)
+    proc_freepagetable(t->pagetable, t->sz);
+}
+
 // free a proc structure and the data hanging from it,
 // including user pages.
 // p->lock must be held.
 static void
 freeproc(struct proc *p)
 {
-  if(p->trapframe)
-    kfree((void*)p->trapframe);
-  p->trapframe = 0;
-  if(p->pagetable)
-    proc_freepagetable(p->pagetable, p->sz);
+  //frees all threads
+  for(int i = 0;i<p->num_threads;i++){
+    freethread(&p->threads[i])
+  }
+  // if(p->trapframe)
+  //   kfree((void*)p->trapframe);
+  // p->trapframe = 0;
+  // if(p->pagetable)
+  //   proc_freepagetable(p->pagetable, p->sz);
  // p->pagetable = 0;
   p->sz = 0;
   p->pid = 0;
@@ -191,6 +217,8 @@ freeproc(struct proc *p)
   p->xstate = 0;
   p->state = UNUSED;
 }
+
+
 
 // Create a user page table for a given process, with no user memory,
 // but with trampoline and trapframe pages.
@@ -295,14 +323,14 @@ userinit(void)
   
   // allocate one user page and copy initcode's instructions
   // and data into it.
-  uvmfirst(p->threads[0]->pagetable, initcode, sizeof(initcode));
+  uvmfirst(p->threads[0].pagetable, initcode, sizeof(initcode));
   p->sz = PGSIZE;
-  p->threads[0]->sz = PGSIZE;
+  p->threads[0].sz = PGSIZE;
 
 
   // prepare for the very first "return" from kernel to user.
-  p->threads[0]->trapframe->epc = 0;      // user program counter
-  p->threads[0]->trapframe->sp = PGSIZE;  // user stack pointer
+  p->threads[0].trapframe->epc = 0;      // user program counter
+  p->threads[0].trapframe->sp = PGSIZE;  // user stack pointer
 
   //todo: possibly modify this
   safestrcpy(p->name, "initcode", sizeof(p->name));
@@ -315,29 +343,33 @@ userinit(void)
 
 // Grow or shrink user memory by n bytes.
 // Return 0 on success, -1 on failure.
+// Changed to threads
 int
 growproc(int n)
 {
   uint64 sz;
-  struct proc *p = myproc();
+  //struct proc *p = myproc();
+  struct sthread *t = mythread();
 
-  sz = p->sz;
+  sz = t->sz;
   if(n > 0){
-    if((sz = uvmalloc(p->pagetable, sz, sz + n, PTE_W)) == 0) {
+    if((sz = uvmalloc(t->pagetable, sz, sz + n, PTE_W)) == 0) {
       return -1;
     }
   } else if(n < 0){
-    sz = uvmdealloc(p->pagetable, sz, sz + n);
+    sz = uvmdealloc(t->pagetable, sz, sz + n);
   }
-  p->sz = sz;
+  t->sz = sz;
   return 0;
 }
 
-//to create a starting thread for a process: pass main into here
-struct sthread init_thread(void* func, void* func_args){
-  struct sthread *nt = &threads[nexttid];
-  nt-> func = func;
-  nt-> func_args = func_args;
+
+//allocates a new thread
+struct sthread thread_alloc(struct proc *parent){
+  struct sthread *nt;
+ // nt-> func = func;
+ // nt-> func_args = func_args;
+  nt->state = RUNNABLE;
 
   nt-> tid = nexttid;
   nexttid++;
@@ -349,12 +381,12 @@ struct sthread init_thread(void* func, void* func_args){
   }
 
   //init trapframe
-  if (nt->trapframe = (struct trapframe *)kalloc() == 0){
+  if ((nt->trapframe = (struct trapframe *)kalloc() ) == 0){
     printf("trapframe fucked :(");
   }
   
   //init kstack uses kstack macro that determines distance from start of all threads to new one
-  nt->kstack = KSTACK((int) (&threads[0] - nt));
+  nt->kstack = KSTACK((int) (&parent->threads[0] - nt));
 
   // Set up new context to start executing at forkret,
   // which returns to user space.
@@ -362,21 +394,23 @@ struct sthread init_thread(void* func, void* func_args){
   nt->context.ra = (uint64)forkret;
   nt->context.sp = nt->kstack + PGSIZE;
 
-  return nt
+  return nt*;
 
 }
 
 //add a new thread to an existing process
-struct sthread create_thread(proc* parent, void* func, void* func_args){
-  struct sthread *nt = init_thread(func, func_args)
+struct sthread create_thread(void* func, void* func_args){
+  struct proc* parent = myproc();
+  struct sthread nt = thread_alloc(parent);
 
   parent->num_threads = parent->num_threads + 1;
-  parent->threads[num_threads] = nt*;
-
+  parent->threads[parent->num_threads] = nt;
+  nt.func = func;
+  nt.arg = func_args;
   
 }
 
-// Create a new process, copying the parent.
+// Create a new process, copying the parent, with a single initial thread (handled in allocproc).
 // Sets up child kernel stack to return as if from fork() system call.
 int
 fork(void)
@@ -391,7 +425,7 @@ fork(void)
   }
 
   // Copy user memory from parent to child.
-  if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0){
+  if(uvmcopy(p->threads[0].pagetable, np->threads[0].pagetable, p->sz) < 0){
     freeproc(np);
     release(&np->lock);
     return -1;
@@ -399,10 +433,10 @@ fork(void)
   np->sz = p->sz;
 
   // copy saved user registers.
-  *(np->trapframe) = *(p->trapframe);
+  *(np->threads[0].trapframe) = *(p->threads[0].trapframe);
 
   // Cause fork to return 0 in the child.
-  np->trapframe->a0 = 0;
+  np->threads[0].trapframe->a0 = 0;
 
   // increment reference counts on open file descriptors.
   for(i = 0; i < NOFILE; i++)
@@ -495,6 +529,7 @@ wait(uint64 addr)
   struct proc *pp;
   int havekids, pid;
   struct proc *p = myproc();
+  struct sthread *t = mythread();
 
   acquire(&wait_lock);
 
@@ -510,7 +545,7 @@ wait(uint64 addr)
         if(pp->state == ZOMBIE){
           // Found one.
           pid = pp->pid;
-          if(addr != 0 && copyout(p->pagetable, addr, (char *)&pp->xstate,
+          if(addr != 0 && copyout(t->pagetable, addr, (char *)&pp->xstate,
                                   sizeof(pp->xstate)) < 0) {
             release(&pp->lock);
             release(&wait_lock);
@@ -560,9 +595,18 @@ scheduler(void)
         // Switch to chosen process.  It is the process's job
         // to release its lock and then reacquire it
         // before jumping back to us.
+        //Examine threads within process
         p->state = RUNNING;
+        //do we need to refactor this to a thread?
         c->proc = p;
-        swtch(&c->context, &p->context);
+        for(int i = 0; i<p->num_threads;i++){
+          struct sthread t = p->threads[i];
+          if((t.state) == RUNNABLE){
+          t.state = RUNNING;
+          p->current_thread = i;
+          swtch(&c->context, &t.context);
+          }
+        }
 
         // Process is done running for now.
         // It should have changed its p->state before coming back.
@@ -585,7 +629,8 @@ sched(void)
 {
   int intena;
   struct proc *p = myproc();
-
+  struct sthread *t = mythread();
+  
   if(!holding(&p->lock))
     panic("sched p->lock");
   if(mycpu()->noff != 1)
@@ -596,7 +641,7 @@ sched(void)
     panic("sched interruptible");
 
   intena = mycpu()->intena;
-  swtch(&p->context, &mycpu()->context);
+  swtch(&t->context, &mycpu()->context);
   mycpu()->intena = intena;
 }
 
@@ -730,9 +775,10 @@ killed(struct proc *p)
 int
 either_copyout(int user_dst, uint64 dst, void *src, uint64 len)
 {
-  struct proc *p = myproc();
+  //struct proc *p = myproc();
+  struct sthread *t = mythread();
   if(user_dst){
-    return copyout(p->pagetable, dst, src, len);
+    return copyout(t->pagetable, dst, src, len);
   } else {
     memmove((char *)dst, src, len);
     return 0;
@@ -747,7 +793,7 @@ either_copyin(void *dst, int user_src, uint64 src, uint64 len)
 {
   struct proc *p = myproc();
   if(user_src){
-    return copyin(p->pagetable, dst, src, len);
+    return copyin(p->threads[p->current_thread].pagetable, dst, src, len);
   } else {
     memmove(dst, (char*)src, len);
     return 0;
