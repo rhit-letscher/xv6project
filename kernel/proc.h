@@ -82,7 +82,9 @@ struct trapframe {
   /* 280 */ uint64 t6;
 };
 
-enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
+enum threadstate { SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
+enum procstate { USED, UNUSED, ZOMBIE_PROC };
+
 
 struct sthread {
   struct spinlock lock;
@@ -94,8 +96,17 @@ struct sthread {
   struct context context; //context/instruction set
   pagetable_t pagetable;       // User page table
   uint64 sz;                   // Size of thread memory (bytes)
-  enum procstate state; //Thread state
+  enum threadstate state; //Thread state
   int killed; //If non-zero, have been killed
+  struct file *ofile[NOFILE];  // Open files
+  struct inode *cwd;           // Current directory
+  char name[16];               // thread name (debugging)
+  int xstate;                  // Exit status to be returned to parent's wait
+
+  void *chan;                  // If non-zero, sleeping on chan
+
+  struct sthread *parent;
+
 
 };
 
@@ -109,7 +120,6 @@ struct proc {
 
   // p->lock must be held when using these:
   enum procstate state;        // Process state
-  void *chan;                  // If non-zero, sleeping on chan
   int killed;                  // If non-zero, have been killed
   int xstate;                  // Exit status to be returned to parent's wait
   int pid;                     // Process ID

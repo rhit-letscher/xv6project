@@ -299,8 +299,8 @@ freeproc(struct proc *p)
   p->sz = 0;
   p->pid = 0;
   p->parent = 0;
-  p->name[0] = 0;
-  p->chan = 0;
+  //p->name[0] = 0;
+  //p->chan = 0;
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
@@ -370,8 +370,8 @@ userinit(void)
   safestrcpy(p->name, "initcode", sizeof(p->name));
   p->cwd = namei("/");
 
-  p->state = RUNNABLE;
-  printf("p->state set to RUNNABLE at line 373\n");
+  //p->state = RUNNABLE;
+ // printf("p->state set to RUNNABLE at line 373\n");
   printf("%p\n", mythread());
 
   //shouldnt need to do this and can't
@@ -422,53 +422,56 @@ struct sthread *create_thread(void* func, void* func_args){
 int
 fork(void)
 {
-  int i, pid;
-  struct proc *np;
+  int i;
   struct proc *p = myproc();
+  struct sthread *t = mythread();
   printf("calling fork\n");
+  //t = parent
+  //p->threads[next] = child
 
-  // Allocate process.
-  if((np = allocproc()) == 0){
+  // Allocate thread.
+  int next = p->num_threads;
+  if(thread_alloc(p,&p->threads[next]) == 0){
     return -1;
   }
+  p->num_threads++;
 
   // Copy user memory from parent to child.
-  if(uvmcopy(p->threads[0].pagetable, np->threads[0].pagetable, p->sz) < 0){
-    freeproc(np);
-    release(&np->lock);
+  if(uvmcopy(t->pagetable, p->threads[next].pagetable, t->sz) < 0){
+    //freeproc(np);
+    //release(&np->lock);
     return -1;
   }
-  np->sz = p->sz;
+  p->threads[next].sz = t->sz;
 
   // copy saved user registers.
-  *(np->threads[0].trapframe) = *(p->threads[0].trapframe);
+  *(p->threads[next].trapframe) = *(t->trapframe);
 
   // Cause fork to return 0 in the child.
-  np->threads[0].trapframe->a0 = 0;
+  p->threads[next].trapframe->a0 = 0;
 
   // increment reference counts on open file descriptors.
   for(i = 0; i < NOFILE; i++)
-    if(p->ofile[i])
-      np->ofile[i] = filedup(p->ofile[i]);
-  np->cwd = idup(p->cwd);
+    if(p->threads[next].ofile[i])
+      p->threads[next].ofile[i] = filedup(p->ofile[i]);
+  p->threads[next].cwd = idup(t->cwd);
 
-  safestrcpy(np->name, p->name, sizeof(p->name));
+  safestrcpy(p->threads[next].name, t->name, sizeof(t->name));
 
-  pid = np->pid;
+  int tid = p->threads[next].tid;
 
-  release(&np->lock);
 
   acquire(&wait_lock);
-  np->parent = p;
+  p->threads[next].parent = t;
   release(&wait_lock);
 
   printf("calling fork setting state runnable\n");
-  acquire(&np->lock);
-  np->state = RUNNABLE;
+  //acquire(&np->lock);
+  p->threads[next].state = RUNNABLE;
   printf("np->state set to RUNNABLE at line 373\n");
-  release(&np->lock);
+  //release(&np->lock);
 
-  return pid;
+  return tid;
 }
 
 // Pass p's abandoned children to init.
@@ -487,31 +490,32 @@ reparent(struct proc *p)
   }
 }
 
-// Exit the current process.  Does not return.
+// Exit the current THREAD.  Does not return.
 // An exited process remains in the zombie state
 // until its parent calls wait().
 void
 exit(int status)
 {
+  struct sthread *t = mythread();
   struct proc *p = myproc();
-  printf("calling exit on proc %d",p->pid);
+  printf("calling exit on proc %d",t->tid);
 
   if(p == initproc)
-    panic("init exiting");
+    printf("init exiting");
 
   // Close all open files.
   for(int fd = 0; fd < NOFILE; fd++){
-    if(p->ofile[fd]){
-      struct file *f = p->ofile[fd];
+    if(t->ofile[fd]){
+      struct file *f = t->ofile[fd];
       fileclose(f);
-      p->ofile[fd] = 0;
+      t->ofile[fd] = 0;
     }
   }
 
   begin_op();
-  iput(p->cwd);
+  iput(t->cwd);
   end_op();
-  p->cwd = 0;
+  t->cwd = 0;
 
   acquire(&wait_lock);
 
@@ -519,12 +523,12 @@ exit(int status)
   reparent(p);
 
   // Parent might be sleeping in wait().
-  wakeup(p->parent);
+  wakeup(t->parent);
   
   acquire(&p->lock);
 
-  p->xstate = status;
-  p->state = ZOMBIE;
+  t->xstate = status;
+  t->state = ZOMBIE;
 
   release(&wait_lock);
 
@@ -554,7 +558,7 @@ wait(uint64 addr)
         acquire(&pp->lock);
 
         havekids = 1;
-        if(pp->state == ZOMBIE){
+        if(pp->state == ZOMBIE_PROC){
           // Found one.
           pid = pp->pid;
           if(addr != 0 && copyout(t->pagetable, addr, (char *)&pp->xstate,
@@ -603,11 +607,11 @@ scheduler(void)
     intr_on();
     
     for(p = proc; p < &proc[NPROC]; p++) {
+      //printf("scheduler starting search..\n");
       acquire(&p->lock);
-     // printf("proc %d pid %d is not runnable, has state %d\n",p,p->pid,p->state);
       
       //we need to check if both the process is runnable and it has a runnable thread
-      if(p->state == RUNNABLE) {
+      if(p->state == USED) {
         // Switch to chosen process.  It is the process's job
         // to release its lock and then reacquire it
         // before jumping back to us.
@@ -616,13 +620,12 @@ scheduler(void)
         int noRunnableThread = 1;
         
         for(int i = 0; i<p->num_threads;i++){
-          //printf("scheduler checking threads\n");
+          printf("scheduler checking threads\n");
           struct sthread *t = &p->threads[i];
           if((t->state) == RUNNABLE){
-          p->state = RUNNING;
           c->proc = p;
           noRunnableThread = 0;
-          //printf("found runnable thread %d state = %d\n",t->tid,t->state);
+          printf("found runnable thread %d state = %d\n",t->tid,t->state);
           t->state = RUNNING;
           c->thread = t;
           //p->current_thread = i;
@@ -651,6 +654,9 @@ scheduler(void)
           //printf("process has no runnable threads, moving on \n");
         }
       }
+      else{
+        //printf("proc %d pid %d is not runnable, has state %d\n",p,p->pid,p->state);
+      }
       //unlock the process that was locked during the yield
       release(&p->lock);
     }
@@ -677,8 +683,8 @@ sched(void)
     panic("sched p->lock");
   if(mycpu()->noff != 1)
     panic("sched locks");
-  if(p->state == RUNNING)
-    panic("sched running");
+  // if(p->state == RUNNING)
+  //   panic("sched running");
   if(t->state == RUNNING)
     panic("thread running in sched");
   if(intr_get())
@@ -698,9 +704,7 @@ yield(void)
   struct proc *p = myproc();
   struct sthread *t = mythread();
   acquire(&p->lock);
-  printf("resetting process state to runnable \n");
-  p->state = RUNNABLE;
-  printf("p->state set to RUNNABLE at line 697\n");
+  printf("resetting thread state to runnable \n");
   t->state = RUNNABLE;
   printf("t->state set to RUNNABLE at line 699\n");
   sched();
@@ -735,7 +739,7 @@ void
 sleep(void *chan, struct spinlock *lk)
 {
   struct proc *p = myproc();
-  struct proc *t = myproc();
+  struct sthread *t = mythread();
 
   // Must acquire p->lock in order to
   // change p->state and then call sched.
@@ -748,19 +752,16 @@ sleep(void *chan, struct spinlock *lk)
   release(lk);
 
   // Go to sleep.
-  p->chan = chan;
+  t->chan = chan;
   printf("t/p set to SLEEPING at line 752\n");
-  p->state = SLEEPING;
-  for(int i = 0;i<p->num_threads;i++){
-    p->threads[i].state = SLEEPING;
-  }
+  t->state = SLEEPING;
   
   
   printf("calling sched from sleep. t-> state is %d\n",t->state);
   sched();
 
   // Tidy up.
-  p->chan = 0;
+  t->chan = 0;
 
   // Reacquire original lock.
   release(&p->lock);
@@ -778,21 +779,21 @@ wakeup(void *chan)
   for(p = proc; p < &proc[NPROC]; p++) {
     if(p != myproc()){
       acquire(&p->lock);
-      if(p->state == SLEEPING && p->chan == chan) {
-        printf("in wakeup, switching proc state\n");
-        p->state = RUNNABLE;
-        printf("p->state set to RUNNABLE at line 771\n");
+      if(p->state == USED){
         for(int i = 0;i<p->num_threads;i++){
-          p->threads[i].state = RUNNABLE;
-          printf("p->threads[i].state set to RUNNABLE at line 774\n");
-          printf("thread state is %d",p->threads[i].state);
+          if(p->threads[i].state == SLEEPING){
+            printf("in wakeup, switching proc state\n");
+            p->threads[i].state = RUNNABLE;
+            printf("t->state set to RUNNABLE at line 771\n");
+            
         }
       }
-      release(&p->lock);
     }
+    release(&p->lock);
   }
+  //printf("finished wakeup\n");
 }
-
+}
 // Kill the process with the given pid.
 // The victim won't exit until it tries to return
 // to user space (see usertrap() in trap.c).
@@ -806,17 +807,21 @@ kill(int pid)
     acquire(&p->lock);
     if(p->pid == pid){
       p->killed = 1;
-      if(p->state == SLEEPING){
+      for(int i = 0;i<p->num_threads;i++){
+      if(p->threads[i].state == SLEEPING){
         // Wake process from sleep().
-        p->state = RUNNABLE;
-        printf("p->state set to RUNNABLE at line 771\n");
+        p->threads[i].state = RUNNABLE;
+        printf("t->state set to RUNNABLE at line 771\n");
       }
-      release(&p->lock);
-      return 0;
+      
     }
     release(&p->lock);
-  }
-  return -1;
+    return 0;
+    }
+  
+  release(&p->lock);
+}
+return -1;
 }
 
 void
