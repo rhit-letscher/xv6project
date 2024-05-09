@@ -166,6 +166,7 @@ kerneltrap()
 void
 clockintr()
 {
+  printf("calling clockintr()\n");
   acquire(&tickslock);
   ticks++;
   wakeup(&ticks);

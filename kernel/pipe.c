@@ -62,6 +62,7 @@ pipealloc(struct file **f0, struct file **f1)
 void
 pipeclose(struct pipe *pi, int writable)
 {
+  printf("calling pipeclose\n");
   acquire(&pi->lock);
   if(writable){
     pi->writeopen = 0;

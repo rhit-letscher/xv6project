@@ -418,6 +418,7 @@ fork(void)
   int i, pid;
   struct proc *np;
   struct proc *p = myproc();
+  printf("calling fork\n");
 
   // Allocate process.
   if((np = allocproc()) == 0){
@@ -454,6 +455,7 @@ fork(void)
   np->parent = p;
   release(&wait_lock);
 
+  printf("calling fork setting state runnable\n");
   acquire(&np->lock);
   np->state = RUNNABLE;
   release(&np->lock);
@@ -466,6 +468,7 @@ fork(void)
 void
 reparent(struct proc *p)
 {
+  printf("calling reparent\n");
   struct proc *pp;
 
   for(pp = proc; pp < &proc[NPROC]; pp++){
@@ -483,6 +486,7 @@ void
 exit(int status)
 {
   struct proc *p = myproc();
+  printf("calling exit on proc %d",p->pid);
 
   if(p == initproc)
     panic("init exiting");
@@ -592,19 +596,25 @@ scheduler(void)
     
     for(p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
-      //printf("calling scheduler\n");
+     // printf("proc %d pid %d is not runnable, has state %d\n",p,p->pid,p->state);
+      
+      //we need to check if both the process is runnable and it has a runnable thread
       if(p->state == RUNNABLE) {
         // Switch to chosen process.  It is the process's job
         // to release its lock and then reacquire it
         // before jumping back to us.
         //Examine threads within process
-        p->state = RUNNING;
-        c->proc = p;
+        //printf("found runnable process %d\n",p->pid);
+        int noRunnableThread = 1;
+        
         for(int i = 0; i<p->num_threads;i++){
-          printf("scheduler checking threads\n");
+          //printf("scheduler checking threads\n");
           struct sthread *t = &p->threads[i];
           if((t->state) == RUNNABLE){
-          printf("found runnable thread %d state = %d\n",t->tid,t->state);
+          p->state = RUNNING;
+          c->proc = p;
+          noRunnableThread = 0;
+          //printf("found runnable thread %d state = %d\n",t->tid,t->state);
           t->state = RUNNING;
           c->thread = t;
           //p->current_thread = i;
@@ -612,15 +622,26 @@ scheduler(void)
           //after switch, running process will lock
           swtch(&c->context, &t->context);
           //after it stops running, it will lock
-          c->thread = 0;
-          printf(" thread done\n");
+          
+          //we shouldn't need to do this
+          //t->state = RUNNABLE;
+          }
+          else{
+            //printf("thread %d is not runnable, has state %d\n",t->tid,t->state);
           }
         }
 
         // Process is done running for now.
         // It should have changed its p->state before coming back.
-        printf("process done\n");
-        c->proc = 0;
+        if(noRunnableThread == 0){
+          c->thread = 0;
+          printf(" thread done\n");
+          printf("process done\n");
+          c->proc = 0;
+        }
+        else{
+          //printf("process has no runnable threads, moving on \n");
+        }
       }
       //unlock the process that was locked during the yield
       release(&p->lock);
@@ -650,6 +671,8 @@ sched(void)
     panic("sched locks");
   if(p->state == RUNNING)
     panic("sched running");
+  if(t->state == RUNNING)
+    panic("thread running in sched");
   if(intr_get())
     panic("sched interruptible");
 
@@ -665,8 +688,11 @@ yield(void)
 {
   printf("calling yield \n");
   struct proc *p = myproc();
+  struct sthread *t = mythread();
   acquire(&p->lock);
+  printf("resetting process state to runnable \n");
   p->state = RUNNABLE;
+  t->state = RUNNABLE;
   sched();
   release(&p->lock);
 }
@@ -729,13 +755,19 @@ sleep(void *chan, struct spinlock *lk)
 void
 wakeup(void *chan)
 {
+  printf("calling wakeup\n");
   struct proc *p;
 
   for(p = proc; p < &proc[NPROC]; p++) {
     if(p != myproc()){
       acquire(&p->lock);
       if(p->state == SLEEPING && p->chan == chan) {
+        printf("in wakeup, switching proc state\n");
         p->state = RUNNABLE;
+        for(int i = 0;i<p->num_threads;i++){
+          p->threads[i].state = RUNNABLE;
+          printf("thread state is %d",p->threads[i].state);
+        }
       }
       release(&p->lock);
     }
@@ -750,6 +782,7 @@ kill(int pid)
 {
   struct proc *p;
 
+  printf("calling kill\n");
   for(p = proc; p < &proc[NPROC]; p++){
     acquire(&p->lock);
     if(p->pid == pid){
