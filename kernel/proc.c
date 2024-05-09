@@ -373,8 +373,10 @@ userinit(void)
   p->state = RUNNABLE;
   printf("p->state set to RUNNABLE at line 373\n");
   printf("%p\n", mythread());
-  mythread()->state = RUNNABLE;
-  printf("mythread()->state set to RUNNABLE at line 375\n");
+
+  //shouldnt need to do this and can't
+  //mythread()->state = RUNNABLE;
+  //printf("mythread()->state set to RUNNABLE at line 375\n");
   printf("done with userinit\n");
   release(&p->lock);
 }
@@ -733,7 +735,8 @@ void
 sleep(void *chan, struct spinlock *lk)
 {
   struct proc *p = myproc();
-  
+  struct proc *t = myproc();
+
   // Must acquire p->lock in order to
   // change p->state and then call sched.
   // Once we hold p->lock, we can be
@@ -746,8 +749,14 @@ sleep(void *chan, struct spinlock *lk)
 
   // Go to sleep.
   p->chan = chan;
+  printf("t/p set to SLEEPING at line 752\n");
   p->state = SLEEPING;
-
+  for(int i = 0;i<p->num_threads;i++){
+    p->threads[i].state = SLEEPING;
+  }
+  
+  
+  printf("calling sched from sleep. t-> state is %d\n",t->state);
   sched();
 
   // Tidy up.
