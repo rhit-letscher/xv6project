@@ -185,6 +185,7 @@ struct sthread *thread_alloc(struct proc *parent, struct sthread *nt){
  // nt-> func = func;
  // nt-> func_args = func_args;
   nt->state = RUNNABLE;
+  printf("nt->state set to RUNNABLE at line 187\n");
 
   nt-> tid = nexttid;
   nexttid++;
@@ -370,6 +371,10 @@ userinit(void)
   p->cwd = namei("/");
 
   p->state = RUNNABLE;
+  printf("p->state set to RUNNABLE at line 373\n");
+  printf("%p\n", mythread());
+  mythread()->state = RUNNABLE;
+  printf("mythread()->state set to RUNNABLE at line 375\n");
   printf("done with userinit\n");
   release(&p->lock);
 }
@@ -458,6 +463,7 @@ fork(void)
   printf("calling fork setting state runnable\n");
   acquire(&np->lock);
   np->state = RUNNABLE;
+  printf("np->state set to RUNNABLE at line 373\n");
   release(&np->lock);
 
   return pid;
@@ -692,7 +698,9 @@ yield(void)
   acquire(&p->lock);
   printf("resetting process state to runnable \n");
   p->state = RUNNABLE;
+  printf("p->state set to RUNNABLE at line 697\n");
   t->state = RUNNABLE;
+  printf("t->state set to RUNNABLE at line 699\n");
   sched();
   release(&p->lock);
 }
@@ -764,8 +772,10 @@ wakeup(void *chan)
       if(p->state == SLEEPING && p->chan == chan) {
         printf("in wakeup, switching proc state\n");
         p->state = RUNNABLE;
+        printf("p->state set to RUNNABLE at line 771\n");
         for(int i = 0;i<p->num_threads;i++){
           p->threads[i].state = RUNNABLE;
+          printf("p->threads[i].state set to RUNNABLE at line 774\n");
           printf("thread state is %d",p->threads[i].state);
         }
       }
@@ -790,6 +800,7 @@ kill(int pid)
       if(p->state == SLEEPING){
         // Wake process from sleep().
         p->state = RUNNABLE;
+        printf("p->state set to RUNNABLE at line 771\n");
       }
       release(&p->lock);
       return 0;
