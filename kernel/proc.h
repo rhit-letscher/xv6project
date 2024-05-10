@@ -117,32 +117,12 @@ struct proc {
   int num_threads;
   int current_thread; //currently executing thread's index in threads list, or -1 if none
   struct sthread threads[MAX_THREADS_PER_PROCESS];
-
-  // p->lock must be held when using these:
   enum procstate state;        // Process state
   int killed;                  // If non-zero, have been killed
   int xstate;                  // Exit status to be returned to parent's wait
   int pid;                     // Process ID
-
-  //pointer to main function so we can init
-  //void* (* func) mainfunc;
-
-  // wait_lock must be held when using this:
   struct proc *parent;         // Parent process
-
-  // these are private to the process, so p->lock need not be held.
-  //uint64 kstack;               // Virtual address of kernel stack
   uint64 sz;                   // Size of process memory (bytes)
-
-  //moved to thread
-  // pagetable_t pagetable;       // User page table
-
-  // struct trapframe *trapframe; // moved to thread data page for trampoline.S
-  
-  //moved to thread
-  //struct context context;      // swtch() here to run process
-  //struct file *ofile[NOFILE];  // Open files
- // struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
 };
 

@@ -273,6 +273,7 @@ found:
 }
 
 static void freethread(struct sthread *t){
+  printf("calling freethread\n");
   if(t->trapframe)
     kfree((void*)t->trapframe);
   t->trapframe = 0;
@@ -294,6 +295,8 @@ static void freethread(struct sthread *t){
 static void
 freeproc(struct proc *p)
 {
+  printf("CALLING freeproc\n");
+  printf("calling freeproc\n");
   //frees all threads
   for(int i = 0;i<p->num_threads;i++){
     freethread(&p->threads[i]);
@@ -767,7 +770,7 @@ sleep(void *chan, struct spinlock *lk)
 
   // Go to sleep.
   t->chan = chan;
-  printf("t/p set to SLEEPING at line 752 with channel %d\n",chan);
+  printf("t/p set to SLEEPING in SLEEP() with channel %d\n",chan);
   t->state = SLEEPING;
   
   
@@ -787,25 +790,26 @@ sleep(void *chan, struct spinlock *lk)
 void
 wakeup(void *chan)
 {
-  printf("calling wakeup on channel %d\n",chan);
+  printf("calling WAKEUP() on channel %d\n",chan);
   struct proc *p;
 
+  //the only runnable proc is my proc?
+
   for(p = proc; p < &proc[NPROC]; p++) {
-    if(p != myproc()){
-      acquire(&p->lock);
       if(p->state == USED){
         for(int i = 0;i<p->num_threads;i++){
           //if im sleeping and on chan (meaning my process is ready)
-          if(p->threads[i].state == SLEEPING && p->threads[i].chan == chan){
+          //acquire(&p->lock);
+          printf("proc has %d threads, threads channel is %d\n",p->num_threads, p->threads[i].chan);
+          if(mythread() != &p->threads[i] && p->threads[i].state == SLEEPING && p->threads[i].chan == chan){
             printf("in wakeup, switching proc %d thread %d state\n",p->pid, p->threads[i].tid);
             p->threads[i].state = RUNNABLE;
             printf("t->state set to RUNNABLE at line 771. State is %d\n",p->threads[i].state);
-            
+            //release(&p->lock);
+
         }
       }
     }
-    release(&p->lock);
-  }
   //printf("looping on proc %d\n",p);
 }
 printf("finished wakeup\n");
@@ -916,6 +920,7 @@ either_copyin(void *dst, int user_src, uint64 src, uint64 len)
 void
 procdump(void)
 {
+  printf("calling procdump\n");
   static char *states[] = {
   [UNUSED]    "unused",
   [USED]      "used",
