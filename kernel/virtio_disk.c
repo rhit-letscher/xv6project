@@ -178,6 +178,7 @@ free_desc(int i)
   disk.desc[i].flags = 0;
   disk.desc[i].next = 0;
   disk.free[i] = 1;
+    printf("calling wakeup() from freedesc\n");
   wakeup(&disk.free[0]);
 }
 

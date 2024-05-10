@@ -23,9 +23,11 @@ int flags2perm(int flags)
     return perm;
 }
 
+//transforms thread into another
 int
 exec(char *path, char **argv)
 {
+  printf("calling exec\n");
   char *s, *last;
   int i, off;
   uint64 argc, sz = 0, sp, ustack[MAXARG], stackbase;
@@ -136,8 +138,10 @@ exec(char *path, char **argv)
   return argc; // this ends up in a0, the first argument to main(argc, argv)
 
  bad:
-  if(pagetable)
+  if(pagetable){
+    printf("bad pagetable\n");
     proc_freepagetable(pagetable, sz);
+  }
   if(ip){
     iunlockput(ip);
     end_op();

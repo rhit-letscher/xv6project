@@ -5,6 +5,7 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
+extern struct sthread* mythread();
 
 uint64
 sys_exit(void)
@@ -19,6 +20,12 @@ uint64
 sys_getpid(void)
 {
   return myproc()->pid;
+}
+
+uint64
+sys_gettid(void)
+{
+  return mythread()->tid;
 }
 
 uint64

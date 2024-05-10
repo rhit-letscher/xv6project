@@ -169,6 +169,7 @@ clockintr()
   printf("calling clockintr()\n");
   acquire(&tickslock);
   ticks++;
+    printf("calling  wakeup from clockintr()\n");
   wakeup(&ticks);
   release(&tickslock);
 }

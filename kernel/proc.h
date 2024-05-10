@@ -141,8 +141,8 @@ struct proc {
   
   //moved to thread
   //struct context context;      // swtch() here to run process
-  struct file *ofile[NOFILE];  // Open files
-  struct inode *cwd;           // Current directory
+  //struct file *ofile[NOFILE];  // Open files
+ // struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
 };
 

@@ -25,6 +25,8 @@
 // there should be one superblock per disk device, but we run with
 // only one device
 struct superblock sb; 
+extern struct sthread* mythread();
+
 
 // Read the super block.
 static void
@@ -656,7 +658,7 @@ namex(char *path, int nameiparent, char *name)
   if(*path == '/')
     ip = iget(ROOTDEV, ROOTINO);
   else
-    ip = idup(myproc()->cwd);
+    ip = idup(mythread()->cwd);
 
   while((path = skipelem(path, name)) != 0){
     ilock(ip);

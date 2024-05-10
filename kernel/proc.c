@@ -278,6 +278,14 @@ static void freethread(struct sthread *t){
   t->trapframe = 0;
   if(t->pagetable)
     proc_freepagetable(t->pagetable, t->sz);
+  t->sz = 0;
+  t->tid = 0;
+  t->parent = 0;
+  //p->name[0] = 0;
+  t->chan = 0;
+  t->killed = 0;
+  t->xstate = 0;
+  t->state = UNUSED;
 }
 
 // free a proc structure and the data hanging from it,
@@ -296,6 +304,7 @@ freeproc(struct proc *p)
   // if(p->pagetable)
   //   proc_freepagetable(p->pagetable, p->sz);
  // p->pagetable = 0;
+  p->num_threads = 0;
   p->sz = 0;
   p->pid = 0;
   p->parent = 0;
@@ -368,7 +377,8 @@ userinit(void)
 
   //todo: possibly modify this
   safestrcpy(p->name, "initcode", sizeof(p->name));
-  p->cwd = namei("/");
+  safestrcpy(p->threads[0].name, "initcode", sizeof(p->name));
+  p->threads[0].cwd = namei("/");
 
   //p->state = RUNNABLE;
  // printf("p->state set to RUNNABLE at line 373\n");
@@ -453,7 +463,7 @@ fork(void)
   // increment reference counts on open file descriptors.
   for(i = 0; i < NOFILE; i++)
     if(p->threads[next].ofile[i])
-      p->threads[next].ofile[i] = filedup(p->ofile[i]);
+      p->threads[next].ofile[i] = filedup(t->ofile[i]);
   p->threads[next].cwd = idup(t->cwd);
 
   safestrcpy(p->threads[next].name, t->name, sizeof(t->name));
@@ -485,6 +495,7 @@ reparent(struct proc *p)
   for(pp = proc; pp < &proc[NPROC]; pp++){
     if(pp->parent == p){
       pp->parent = initproc;
+        printf("calling wakeup from reparent\n");
       wakeup(initproc);
     }
   }
@@ -523,6 +534,7 @@ exit(int status)
   reparent(p);
 
   // Parent might be sleeping in wait().
+  printf("calling wakeup from exit\n");
   wakeup(t->parent);
   
   acquire(&p->lock);
@@ -638,7 +650,7 @@ scheduler(void)
           //t->state = RUNNABLE;
           }
           else{
-            //printf("thread %d is not runnable, has state %d\n",t->tid,t->state);
+            printf("thread %d is not runnable, has state %d\n",t->tid,t->state);
           }
         }
 
@@ -735,6 +747,8 @@ forkret(void)
 
 // Atomically release lock and sleep on chan.
 // Reacquires lock when awakened.
+// Threads sleep when they are waiting for some console input
+// and are woken up via "wakeup" when this input comes into chan
 void
 sleep(void *chan, struct spinlock *lk)
 {
@@ -753,7 +767,7 @@ sleep(void *chan, struct spinlock *lk)
 
   // Go to sleep.
   t->chan = chan;
-  printf("t/p set to SLEEPING at line 752\n");
+  printf("t/p set to SLEEPING at line 752 with channel %d\n",chan);
   t->state = SLEEPING;
   
   
@@ -773,7 +787,7 @@ sleep(void *chan, struct spinlock *lk)
 void
 wakeup(void *chan)
 {
-  printf("calling wakeup\n");
+  printf("calling wakeup on channel %d\n",chan);
   struct proc *p;
 
   for(p = proc; p < &proc[NPROC]; p++) {
@@ -781,18 +795,20 @@ wakeup(void *chan)
       acquire(&p->lock);
       if(p->state == USED){
         for(int i = 0;i<p->num_threads;i++){
-          if(p->threads[i].state == SLEEPING){
-            printf("in wakeup, switching proc state\n");
+          //if im sleeping and on chan (meaning my process is ready)
+          if(p->threads[i].state == SLEEPING && p->threads[i].chan == chan){
+            printf("in wakeup, switching proc %d thread %d state\n",p->pid, p->threads[i].tid);
             p->threads[i].state = RUNNABLE;
-            printf("t->state set to RUNNABLE at line 771\n");
+            printf("t->state set to RUNNABLE at line 771. State is %d\n",p->threads[i].state);
             
         }
       }
     }
     release(&p->lock);
   }
-  //printf("finished wakeup\n");
+  //printf("looping on proc %d\n",p);
 }
+printf("finished wakeup\n");
 }
 // Kill the process with the given pid.
 // The victim won't exit until it tries to return
