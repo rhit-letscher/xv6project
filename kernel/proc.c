@@ -189,16 +189,16 @@ struct sthread *thread_alloc(struct proc *parent, struct sthread *nt){
 
   nt-> tid = nexttid;
   nexttid++;
+  
+  //init trapframe
+  if ((nt->trapframe = (struct trapframe *)kalloc() ) == 0){
+    printf("trapframe fucked :(");
+  }
 
   //init pagetable
   nt->pagetable = thread_pagetable(nt);
   if(nt->pagetable == 0){
     printf("pagetable fucked :(");
-  }
-
-  //init trapframe
-  if ((nt->trapframe = (struct trapframe *)kalloc() ) == 0){
-    printf("trapframe fucked :(");
   }
   
   //init kstack uses kstack macro that determines distance from start of all threads to new one
@@ -371,6 +371,8 @@ userinit(void)
   // and data into it.
   uvmfirst(p->threads[0].pagetable, initcode, sizeof(initcode));
   p->sz = PGSIZE;
+
+  //TODO: THIS MIGHT BE WRONG (PGSIZE/THREADS_PER_PROCESS)
   p->threads[0].sz = PGSIZE;
 
 
@@ -383,9 +385,9 @@ userinit(void)
   safestrcpy(p->threads[0].name, "initcode", sizeof(p->name));
   p->threads[0].cwd = namei("/");
 
-  //p->state = RUNNABLE;
- // printf("p->state set to RUNNABLE at line 373\n");
-  printf("%p\n", mythread());
+  p->state = USED;
+  p->threads[0].state = RUNNABLE;
+  printf("p->state set to RUNNABLE at line 373\n");
 
   //shouldnt need to do this and can't
   //mythread()->state = RUNNABLE;
@@ -421,10 +423,15 @@ growproc(int n)
 struct sthread *create_thread(void* func, void* func_args){
   struct proc* parent = myproc();
   struct sthread* nt = thread_alloc(parent, &parent->threads[parent->num_threads]);
-
+  
 
   parent->num_threads = parent->num_threads + 1;
   //parent->threads[parent->num_threads] = *nt;
+
+  //overwrite context: instead of executing at forkret, we want to execute at whatever function in parameter
+  nt->context.ra = (uint64)func;
+  //todo push args onto stack
+
   nt->func = func;
   nt->arg = func_args;
   return nt;
@@ -732,12 +739,21 @@ void
 forkret(void)
 {
   printf("here at forkret\n");
+  printf("here at forkret\n");
+  printf("here at forkret\n");
+  printf("here at forkret\n");
+  printf("here at forkret\n");
+  printf("here at forkret\n");
+    printf("here at forkret\n");
+  printf("here at forkret\n");
+  printf("here at forkret\n");
   static int first = 1;
 
   // Still holding p->lock from scheduler.
   release(&myproc()->lock);
 
   if (first) {
+    printf("first process calling fsinit\n");
     // File system initialization must be run in the context of a
     // regular process (e.g., because it calls sleep), and thus cannot
     // be run from main().
@@ -745,6 +761,7 @@ forkret(void)
     fsinit(ROOTDEV);
   }
 
+  printf("calling  usertrapret from forkret\n");
   usertrapret();
 }
 

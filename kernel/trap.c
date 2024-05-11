@@ -39,6 +39,7 @@ trapinithart(void)
 void
 usertrap(void)
 {
+  printf("CALLING USERTRAP!\n");
   int which_dev = 0;
 
   if((r_sstatus() & SSTATUS_SPP) != 0)
@@ -49,10 +50,15 @@ usertrap(void)
   w_stvec((uint64)kernelvec);
 
   struct sthread *t = mythread();
-  
+  printf("mythread is %d",mythread());
+
+
   // save user program counter.
   t->trapframe->epc = r_sepc();
-  
+  printf("r_sepc is %d",r_sepc());
+  printf("trapframe is %d",t->trapframe->epc);
+
+
   if(r_scause() == 8){
     // system call
 
@@ -83,6 +89,7 @@ usertrap(void)
   if(which_dev == 2)
     yield();
 
+  printf("calling usertrapret from usertrap\n");
   usertrapret();
 }
 
@@ -92,7 +99,12 @@ usertrap(void)
 void
 usertrapret(void)
 {
+  printf("in usertrapret\n");
+
   struct sthread *p = mythread();
+  //look at address in trapframe->epc
+  printf("epc is %d\n",p->trapframe->epc);
+
 
   // we're about to switch the destination of traps from
   // kerneltrap() to usertrap(), so turn off interrupts until

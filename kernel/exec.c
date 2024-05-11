@@ -27,7 +27,10 @@ int flags2perm(int flags)
 int
 exec(char *path, char **argv)
 {
-  printf("calling exec\n");
+  printf("CALLING EXEC exec\n");
+  printf("CALLING EXEC exec\n");
+  printf("CALLING EXEC exec\n");
+
   char *s, *last;
   int i, off;
   uint64 argc, sz = 0, sp, ustack[MAXARG], stackbase;

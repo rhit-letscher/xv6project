@@ -178,7 +178,7 @@ free_desc(int i)
   disk.desc[i].flags = 0;
   disk.desc[i].next = 0;
   disk.free[i] = 1;
-    printf("calling wakeup() from freedesc\n");
+  printf("calling wakeup() from kirtio_disk free_desc\n");
   wakeup(&disk.free[0]);
 }
 
@@ -216,6 +216,7 @@ alloc3_desc(int *idx)
 void
 virtio_disk_rw(struct buf *b, int write)
 {
+  printf("VIRTIO_DISK_RW()\n");
   uint64 sector = b->blockno * (BSIZE / 512);
 
   acquire(&disk.vdisk_lock);
@@ -227,9 +228,10 @@ virtio_disk_rw(struct buf *b, int write)
   // allocate the three descriptors.
   int idx[3];
   while(1){
-    if(alloc3_desc(idx) == 0) {
-      break;
-    }
+     if(alloc3_desc(idx) == 0) {
+       break;
+     }
+    printf("calling sleep from virtio_disk_rw\n");
     sleep(&disk.free[0], &disk.vdisk_lock);
   }
 
@@ -283,6 +285,7 @@ virtio_disk_rw(struct buf *b, int write)
 
   // Wait for virtio_disk_intr() to say request has finished.
   while(b->disk == 1) {
+    printf("calling SLEEP() from virtio_disk\n");
     sleep(b, &disk.vdisk_lock);
   }
 
@@ -290,6 +293,7 @@ virtio_disk_rw(struct buf *b, int write)
   free_chain(idx[0]);
 
   release(&disk.vdisk_lock);
+  printf("VIRTIO_DISK_RW() locked\n");
 }
 
 void
@@ -319,6 +323,7 @@ virtio_disk_intr()
 
     struct buf *b = disk.info[id].b;
     b->disk = 0;   // disk is done with buf
+    printf("calling wakeup() from virtio_disk_inr()\n");
     wakeup(b);
 
     disk.used_idx += 1;
