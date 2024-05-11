@@ -10,6 +10,7 @@
 extern struct sthread* mythread();
 extern int threadkilled(struct sthread *t);
 extern void threadsetkilled(struct sthread *t);
+extern pagetable_t thread_pagetable(struct sthread *s);
 
 static int loadseg(pde_t *, uint64, struct inode *, uint, uint);
 
@@ -56,8 +57,8 @@ exec(char *path, char **argv)
   if(elf.magic != ELF_MAGIC)
     goto bad;
 
-  // if((pagetable = proc_pagetable(p)) == 0)
-  //   goto bad;
+  if((pagetable = thread_pagetable(t)) == 0)
+    goto bad;
 
   // Load program into memory.
   for(i=0, off=elf.phoff; i<elf.phnum; i++, off+=sizeof(ph)){

@@ -20,6 +20,7 @@ int nextpid = 1;
 int nexttid = 0;
 struct spinlock pid_lock;
 
+extern pagetable_t thread_pagetable(struct sthread *s);
 extern void forkret(void);
 static void freeproc(struct proc *p);
 extern char trampoline[]; // trampoline.S
@@ -189,7 +190,7 @@ struct sthread *thread_alloc(struct proc *parent, struct sthread *nt){
 
   nt-> tid = nexttid;
   nexttid++;
-  
+
   //init trapframe
   if ((nt->trapframe = (struct trapframe *)kalloc() ) == 0){
     printf("trapframe fucked :(");
@@ -203,6 +204,8 @@ struct sthread *thread_alloc(struct proc *parent, struct sthread *nt){
   
   //init kstack uses kstack macro that determines distance from start of all threads to new one
   nt->kstack = KSTACK((int) (&parent->threads[0] - nt));
+  //nt->kstack = KSTACK((int) (initproc - parent));
+
 
   // Set up new context to start executing at forkret,
   // which returns to user space.
@@ -319,7 +322,6 @@ freeproc(struct proc *p)
 }
 
 
-
 // Create a user page table for a given process, with no user memory,
 // but with trampoline and trapframe pages.
 // pagetable_t
@@ -385,7 +387,7 @@ userinit(void)
   safestrcpy(p->threads[0].name, "initcode", sizeof(p->name));
   p->threads[0].cwd = namei("/");
 
-  p->state = USED;
+  //p->state = USED;
   p->threads[0].state = RUNNABLE;
   printf("p->state set to RUNNABLE at line 373\n");
 
